@@ -9,16 +9,12 @@ import math
 import time
 
 class rawfcs(object):
-    '''
-    classdocs
-    '''
+    '''Work on raw fcs files. Read, trajectory, autocorrelate'''
 
     fclock = 20.e6
 
     def __init__(self, thisfilename):
-        '''
-        Constructor
-        '''
+        '''Create the class with a filename (or url)'''
         self.filename = thisfilename
 
     def readrawfile(self):
@@ -67,7 +63,7 @@ class rawfcs(object):
         padlength = need - ntraj
         pad = np.zeros(padlength) + imean
         traj = np.append(bintraj, pad)
-        npad=  len(traj)
+        npad = len(traj)
         print(n2)
         print(tx[0], tx[-1], tx[-2])
         delt = tx[1] - tx[0]
@@ -77,7 +73,7 @@ class rawfcs(object):
         self.tx = thistx ##tx[:-1] + (tx[1] - tx[0])/2.
         self.traj =  traj
 
-        return traj;
+        return traj
 
     def binrawdisplay(self, n, start, stop):
         self.trajdisplay, tx = np.histogram(self.arrivaltimes, bins = 2**n, range = [start,stop])
@@ -129,9 +125,9 @@ class rawfcs(object):
             start = 0
             stop = 0
             count = 0
-            #print acc.size
+            
             vsize = acc.size
-            #print type(vsize)
+            
             for bin in bins:
                 stop = start + bin
                 if (start >= vsize): break
@@ -146,47 +142,7 @@ class rawfcs(object):
                 acctimelist.append(np.mean(self.tx[start:stop + 1]))
 
                 start = stop
-
-            ''' tried the commented out way below, but it is slower!!! '''
-    #        jbin = 0
-    #        jacc = 0
-    #        binnums = np.zeros(bins.size)
-    #        bincorrs = np.zeros(bins.size)
-    #        ztest = min(d)
-    #
-    #        for z in d:
-    #            binnums[z] +=1
-    #            bincorrs[z] += acc[jacc]
-    #            jacc+=1
-    #
-    #        nzero = np.nonzero(binnums)
-    #        ntimes = bins[nzero]
-    #        corrs = bincorrs[nzero]/binnums[nzero]
-    #
-    #        tt1 = time.time()
-    #        print tt1 - tt0, " another way"
-            '''the way I did thi in idl is much faster so I will comment this out
-            '''
-
-
-            '''
-            for i in range(bins.size-1):
-                lag1 = bins[i]
-                lag2 = bins[i+1]
-
-                #w = np.where(d == i + 1)
-                e = np.extract(d == i+1, acc)
-
-                if e.size == 0:continue
-                #print i, lag1,lag2,len(w[0]), type(acc[w])
-                thisacc = np.sum(e)/e.size
-
-                #print i, lag1, lag2, (lag1 +lag2)/2.,len(e), thisacc
-                acclist.append(thisacc)
-                actimelist.append((lag1 + lag2)/2.)
-                #actimelist.append(lag1)
-
-            '''
+                
             tmr2 = time.time()
             print("endbin")
 
