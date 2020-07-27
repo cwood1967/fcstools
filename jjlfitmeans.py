@@ -2,7 +2,7 @@ import numpy
 import csv
 import FcsFit
 
-from matplotlib import pyplot
+from matplotlib import pyplot as plt
 
 class acCurve:
     def __init__(self, green, red):
@@ -56,13 +56,13 @@ def readjjlfile(filename):
     if py % 3 > 0:
         py = py +1
     pi = 0
-    print px,py, ncurves
-    pyplot.plot([0],[0])
+    print(px,py, ncurves)
+    plt.plot([0],[0])
     xtitle = ""
     colors = {1:"red", 2:"green", 21:"blue"}
     for c in curves:
         title = ":".join([c.green,c.red])
-        print title
+        print(title)
         x = numpy.asarray(c.tau, numpy.float64)
         y = numpy.asarray(c.corr, numpy.float64)
 
@@ -81,15 +81,15 @@ def readjjlfile(filename):
         fit.setBounds([[0,2],[.1,1000.],[.98,1.02]]) #, [.000002,6.],[.9,1.1]])
         params = fit.fit_slsqp('1comp')
 
-        if title <> xtitle:
+        if title != xtitle:
             pi = pi + 1
-            pyplot.subplot(py,px,pi)
-            pyplot.cla()
+            plt.subplot(py,px,pi)
+            plt.cla()
             xtitle = title
-            pyplot.title(":".join([c.green,c.red]))
+            plt.title(":".join([c.green,c.red]))
 
 
-        pyplot.semilogx(x, y, color=colors[int(c.channel)])
+        plt.semilogx(x, y, color=colors[int(c.channel)])
 
         c.g0 = params[0]
         c.td = params[1]
@@ -104,9 +104,9 @@ def readjjlfile(filename):
         func = g1*trip + c.offset
 #        func = c.g0/(1. + x/c.td)/numpy.sqrt(1 + x/(25.*c.td)) + c.offset
         c.yfit = func
-        pyplot.semilogx(x,func)
+        plt.semilogx(x,func)
 
-        print c.green, "," ,c.red, ",", c.channel, ",", c.g0, c.td, c.fk, c.tb, c.offset
+        print(c.green, "," ,c.red, ",", c.channel, ",", c.g0, c.td, c.fk, c.tb, c.offset)
 
 
 

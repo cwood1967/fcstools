@@ -8,7 +8,7 @@ import numpy as np
 import math
 import time
 
-class rawfcs(object):
+class FcsTrajectory(object):
     '''Work on raw fcs files. Read, trajectory, autocorrelate'''
 
     fclock = 20.e6
@@ -20,7 +20,7 @@ class rawfcs(object):
     def readrawfile(self):
 
         if self.filename[0:4] == "http":
-            pass
+            raw = 0
             # try:
             #     tr = time.time()
             #     handle = urllib2.urlopen(self.filename)
@@ -36,112 +36,92 @@ class rawfcs(object):
         else:
             raw = np.fromfile(self.filename, dtype=np.int32)
     
-        print(type(raw), len(raw))
         self.raw = raw[32:]
         self.arrivaltimes = np.cumsum(self.raw)/self.fclock
 
         self.lasttime= self.arrivaltimes[-1]
 
     def binraw(self, n, start, stop):
-        self.traj, tx = np.histogram(self.arrivaltimes, bins = math.pow(2,n), range = [start,stop])
+        self.traj, tx = np.histogram(self.arrivaltimes,
+                                     bins = math.pow(2,n),
+                                     range = [start,stop])
         txdel = tx[1] - tx[0]
         self.tx = tx[:-1] + txdel
         self.padfactor = 1.0
         return self.traj
 
-    def binpad(self, bintime):
-        start = self.arrivaltimes[0]
-        start = 50e-9
-        stop = self.arrivaltimes[-1]
-        nbins = int((stop-start)/bintime) + 1
-        bintraj, tx = np.histogram(self.arrivaltimes, bins =nbins, range = [start, stop + start])
+    def bin(self, bintime, display=False):
+        start = 0
+        stop = self.arrivaltimes[-1] + bintime
+        bins = np.arange(start, stop, bintime)
+        bintraj, tx = np.histogram(self.arrivaltimes, bins=bins)
 
-        ntraj = len(bintraj)
+        if display:
+            self.trajdisplay = bintraj
+            self.txdisplay = tx[:-1]
+        else:
+            self.traj = bintraj
+            self.tx = tx[:-1]
+            self.padfactor = 1
+            
+        return bintraj, tx[:-1]
+    
+    def padtraj(self):
+        ntraj = len(self.traj)
         n2 = int(math.log(ntraj)/math.log(2))+ 1
         need = 2**n2
-        imean = np.mean(bintraj)
-        padlength = need - ntraj
-        pad = np.zeros(padlength) + imean
-        traj = np.append(bintraj, pad)
-        npad = len(traj)
-        print(n2)
-        print(tx[0], tx[-1], tx[-2])
-        delt = tx[1] - tx[0]
-        thisstop = tx[0] + delt*npad
+        imean = self.traj.mean()
+        padded = np.zeros(need) + imean
+        padded[:ntraj] = self.traj
+        npad = len(padded)
         self.padfactor = npad/ntraj
-        thistx = np.arange(tx[0],thisstop,tx[1]-tx[0])
-        self.tx = thistx ##tx[:-1] + (tx[1] - tx[0])/2.
-        self.traj =  traj
+        
+        dtime = self.tx[1] - self.tx[0]
+        total_time = npad*dtime
+        thistx = np.linspace(self.tx[0], total_time, npad)
+        self.txpadded = thistx
+        self.trajpadded =  padded
+        return
 
-        return traj
-
-    def binrawdisplay(self, n, start, stop):
-        self.trajdisplay, tx = np.histogram(self.arrivaltimes, bins = 2**n, range = [start,stop])
-        txdel = tx[1] - tx[0]
-        self.txdisplay = tx[:-1] + txdel
-        return self.trajdisplay
 
     def autocorrelate(self, binres):
         print("start c")
         tmr0 = time.time()
-        dt = self.traj - self.traj.mean()
+        self.padtraj()
+        dt = self.trajpadded - self.trajpadded.mean()
         f1 = np.fft.fft(dt)
 
         fac = f1*np.conj(f1)
-        acc = np.fft.ifft(fac)/self.traj.size
+        acc = np.fft.ifft(fac)/len(self.trajpadded)
+    
         acc = acc[1:len(acc)//2]
-        imean = np.mean(self.traj)
-        acc = 1. + self.padfactor*np.real(acc)/imean/imean
+        imean = np.mean(self.trajpadded)
+        acc = 0. + self.padfactor*np.real(acc)/imean/imean
         tmr1 = time.time()
-        npoints = len(acc)
 
-        if binres == 0:
-            self.actime = self.tx[1:self.tx.size/2]
-            self.autocorr = acc
-            print("lens ", acc.size, self.actime.size)
-            return self.autocorr
-        else:
-            ''' bins is the number of points from the correlation to average'''
-            bins = self.createLogBins(npoints, 400)
-
-            yval = np.zeros(acc.size)
-            print(len(yval), len(acc))
-
-            acclist = []
-            actimelist = []
-            txindex = 0
+        self.rawactime = self.txpadded[1:len(acc) + 1]
+        self.rawautocorr = acc
+        
+        if binres:
             print("start bin")
-
-            tmd0 = time.time()
-            #d = np.digitize(self.tx[1:acc.size/2], bins)
-            tmd1 = time.time()
-            print(tmd1 -tmd0, " digitize")
-
-            tt0 = time.time()
             tmr3 = time.time()
-            ''' do this the way originally in idl '''
+            bins = self.createLogBins(len(acc), 120)
+            dzbins = np.digitize(self.rawactime, bins)
+            
+            udz = np.unique(dzbins)
+            
             acclist = []
             acctimelist = []
-            start = 0
-            stop = 0
-            count = 0
             
-            vsize = acc.size
-            
-            for bin in bins:
-                stop = start + bin
-                if (start >= vsize): break
-                if (stop > vsize):break
-                    #stop = vsize
+            for u in udz:
+                dzb = np.where(dzbins == u)
+                time_points = self.rawactime[dzb]
+                acc_points = self.rawautocorr[dzb]
+                dt = time_points.mean()      
 
-                width = np.float(stop - start)
-
-                temp = np.sum(acc[start:stop])/width
-                #print start, stop, bin, width, temp,np.mean(self.tx[start:stop + 1])
+                temp = np.sum(acc_points)/len(acc_points)
                 acclist.append(temp)
-                acctimelist.append(np.mean(self.tx[start:stop + 1]))
-
-                start = stop
+                acctimelist.append(dt)
                 
             tmr2 = time.time()
             print("endbin")
@@ -156,26 +136,12 @@ class rawfcs(object):
             return self.autocorr
 
     def createLogBins(self,ntimepoints,nbins):
-        mintime = self.tx[0]
-        maxtime = self.tx[ntimepoints-1]
-
-        ''' this really needs to have correlation points to always be the same
-            so do something else here -
-        '''
-        logmin = np.floor(math.log10(mintime))
-        logmax = np.ceil(math.log10(maxtime))
-        binmin = 0
-        binmax = np.int(np.ceil(logmax - logmin))
-        #print binmin, binmax
-
-        '''
-        bins = []
-        for bin in range(binmin, binmax):
-            x = np.logspace(bin,bin+1, 10,endpoint=False).astype('int')
-            bins.extend(x)
-
-        '''
-        bins = np.logspace(binmin, binmax, nbins).astype('int')
-        bins = np.asarray(bins)
-        return bins
+        mintime = self.rawactime[0]
+        maxtime = self.rawactime[-1]
+        logmin = math.log10(mintime)
+        logmax = math.log10(maxtime)
+        
+        bins = np.logspace(logmin, logmax, nbins)
+        self.acbins = bins
+        return self.acbins
 
