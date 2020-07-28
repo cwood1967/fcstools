@@ -1,22 +1,25 @@
-'''
-Created on Mar 4, 2011
-
-@author: cjw
-'''
-
-import numpy as np
 import math
 import time
+
+import numpy as np
+import pandas as pd
 
 class FcsTrajectory(object):
     '''Work on raw fcs files. Read, trajectory, autocorrelate'''
 
     fclock = 20.e6
 
-    def __init__(self, thisfilename):
+    def __init__(self, thisfilename, bintime):
         '''Create the class with a filename (or url)'''
         self.filename = thisfilename
+        self.bintime = bintime
 
+    def __call__(self):
+        self.readrawfile()
+        self.bin(self.bintime, display=False)
+        self.bin(self.lasttime/1000, display=True)
+        self._autocorrelate(1)
+        
     def readrawfile(self):
 
         if self.filename[0:4] == "http":
@@ -84,8 +87,8 @@ class FcsTrajectory(object):
         return
 
 
-    def autocorrelate(self, binres):
-        print("start c")
+    def _autocorrelate(self, binres):
+        # print("start c")
         tmr0 = time.time()
         self.padtraj()
         dt = self.trajpadded - self.trajpadded.mean()
@@ -97,13 +100,12 @@ class FcsTrajectory(object):
         acc = acc[1:len(acc)//2]
         imean = np.mean(self.trajpadded)
         acc = 0. + self.padfactor*np.real(acc)/imean/imean
-        tmr1 = time.time()
 
         self.rawactime = self.txpadded[1:len(acc) + 1]
         self.rawautocorr = acc
         
         if binres:
-            print("start bin")
+            # print("start bin")
             tmr3 = time.time()
             bins = self.createLogBins(len(acc), 120)
             dzbins = np.digitize(self.rawactime, bins)
@@ -124,15 +126,15 @@ class FcsTrajectory(object):
                 acctimelist.append(dt)
                 
             tmr2 = time.time()
-            print("endbin")
+            # print("endbin")
 
 
             self.autocorr = np.asarray(acclist)
             self.actime = np.asarray(acctimelist)
-            print("endc")
-            print(tmr2-tmr0, "everything")
-            print(tmr2-tmr3, "binloggin")
-            print(tmr1 -tmr0, "correlation")
+            # print("endc")
+            # print(tmr2-tmr0, "everything")
+            # print(tmr2-tmr3, "binloggin")
+            # print(tmr1 -tmr0, "correlation")
             return self.autocorr
 
     def createLogBins(self,ntimepoints,nbins):
@@ -141,7 +143,13 @@ class FcsTrajectory(object):
         logmin = math.log10(mintime)
         logmax = math.log10(maxtime)
         
-        bins = np.logspace(logmin, logmax, nbins)
+        bins = np.logspace(logmin, logmax, nbins, endpoint=False)
         self.acbins = bins
         return self.acbins
+    
+    def ac_as_dataframe(self):
+
+        return pd.DataFrame({'file':self.filename,
+                             'tau':self.actime,
+                             'autocorr':self.autocorr})        
 
