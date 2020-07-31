@@ -1,5 +1,6 @@
 import math
 import time
+import os
 
 import numpy as np
 import pandas as pd
@@ -107,7 +108,7 @@ class FcsTrajectory(object):
         if binres:
             # print("start bin")
             tmr3 = time.time()
-            bins = self.createLogBins(len(acc), 120)
+            bins = self.createLogBins(len(acc), 160)
             dzbins = np.digitize(self.rawactime, bins)
             
             udz = np.unique(dzbins)
@@ -119,7 +120,7 @@ class FcsTrajectory(object):
                 dzb = np.where(dzbins == u)
                 time_points = self.rawactime[dzb]
                 acc_points = self.rawautocorr[dzb]
-                dt = time_points.mean()      
+                dt = time_points.mean()     
 
                 temp = np.sum(acc_points)/len(acc_points)
                 acclist.append(temp)
@@ -149,7 +150,41 @@ class FcsTrajectory(object):
     
     def ac_as_dataframe(self):
 
-        return pd.DataFrame({'file':self.filename,
+        return pd.DataFrame({'file':os.path.basename(self.filename),
                              'tau':self.actime,
                              'autocorr':self.autocorr})        
 
+
+def readfcsfile(filename):
+    
+    corr_start = 'CorrelationArraySize'
+    corrsize = 'CorrelationArray ='
+    corr_end = 'PulseDistanceHistogramArraySize'
+    print(filename)
+    fcslines = open(filename, errors='replace').readlines()
+    
+    starts = [(i, line.strip()) for i, line in enumerate(fcslines) if corrsize in line]
+    stops = [(i, line.strip()) for i, line in enumerate(fcslines) if corr_end in line]
+    
+    df_list = list()
+    for i, num in enumerate(starts):
+        first = num[0] + 1
+        asize = int(fcslines[num[0]].split('=')[1].split()[0])
+        last = first +  asize ##stops[i][0] - 1
+        _df = lines_to_df(fcslines[first:last])
+        _df['series'] = i
+        _df['file'] = os.path.basename(filename)
+        df_list.append(_df)
+    return pd.concat(df_list) 
+
+def lines_to_df(lines):
+    
+    taulist = list()
+    aclist = list()
+    for line in lines:
+        t, ac = line.strip().split()
+        taulist.append(float(t))
+        aclist.append(float(ac) - 1.)
+            
+    df = pd.DataFrame({'tau':taulist, 'autocorr':aclist})
+    return df
